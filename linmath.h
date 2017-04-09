@@ -6,11 +6,13 @@
 #include "float.h"
 #include "assert.h"
 
-#define LINMATH_EPS 0.0001f
+#define LINMATH_EPS ((float) 1e-4)
 
-#define min(x,y) (x < y ? x : y)
-#define max(x,y) (x > y ? x : y)
-#define clamp(x,a,b) (x < a ? a : (x > b ? b : x))
+#define min(x,y) ((x) < (y) ? (x) : (y))
+#define max(x,y) ((x) > (y) ? (x) : (y))
+#define clamp(x,a,b) ((x) < (a) ? (a) : ((x) > (b) ? (b) : (x)))
+#define degrees_to_rads(degrees) (M_PI * (degrees) / 180.f)
+#define rads_to_degrees(rads) (180.f * (rads) / M_PI)
 
 
 #define LINMATH_H_DEFINE_VEC(n) \
@@ -245,6 +247,12 @@ static inline void mat##n##x##n##_set_row(mat##n##x##n M, vec##n const v, uint8_
 	for (j = 0; j < n; ++j) { \
 		M[j][row_index] = v[j]; \
 	} \
+} \
+static inline void mat##n##x##n##_dup(mat##n##x##n M, mat##n##x##n const N) { \
+	uint8_t i, j; \
+	for (i = 0; i < n; ++i) \
+		for (j = 0; j < n; ++j) \
+			M[i][j] = N[i][j]; \
 }
 
 LINMATH_H_DEFINE_MAT(3);
@@ -256,12 +264,6 @@ static inline void mat4x4_identity(mat4x4 M) {
 	for (i = 0; i < 4; ++i)
 		for (j = 0; j < 4; ++j)
 			M[i][j] = i == j ? 1.f : 0.f;
-}
-static inline void mat4x4_dup(mat4x4 M, mat4x4 const N) {
-	int i, j;
-	for (i = 0; i < 4; ++i)
-		for (j = 0; j < 4; ++j)
-			M[i][j] = N[i][j];
 }
 static inline void mat4x4_row(vec4 r, mat4x4 const M, int i) {
 	int k;
@@ -613,13 +615,11 @@ static inline void quat_conj(quat r, quat const q) {
 		r[i] = -q[i];
 	r[3] = q[3];
 }
-static inline void quat_rotate(quat r, float angle, vec3 const axis) {
-	vec3 v;
-	vec3_scale(v, axis, sinf(angle / 2));
-	int i;
-	for (i = 0; i < 3; ++i)
-		r[i] = v[i];
-	r[3] = cosf(angle / 2);
+static inline void quat_rotate(quat r, float rads, vec3 const axis) {
+	vec3 axis_norm;
+	vec3_norm(axis_norm, axis);
+	vec3_scale(r, axis_norm, sinf(rads / 2));
+	r[3] = cosf(rads / 2);
 }
 
 static inline void quat_mul_vec3(vec3 r, quat const q, vec3 const v) {
@@ -627,20 +627,20 @@ static inline void quat_mul_vec3(vec3 r, quat const q, vec3 const v) {
 	 * Method by Fabian 'ryg' Giessen (of Farbrausch)
 	 t = 2 * cross(q.xyz, v)
 	 v' = v + q.w * t + cross(q.xyz, t)
-	 todo: check if in-place quat_mul_vec3(r, r, v) works
+	 In-place operations quat_mul_vec3(r, q, r) also work.
 	 */
 	vec3 t;
 	vec3 q_xyz = { q[0], q[1], q[2] };
 	vec3 u = { q[0], q[1], q[2] };
 
 	vec3_mul_cross(t, q_xyz, v);
-	vec3_scale(t, t, 2);
+	vec3_scale_self(t, 2);
 
 	vec3_mul_cross(u, q_xyz, t);
-	vec3_scale(t, t, q[3]);
+	vec3_scale_self(t, q[3]);
 
 	vec3_add(r, v, t);
-	vec3_add(r, r, u);
+	vec3_add_self(r, u);
 }
 
 /*
@@ -723,12 +723,20 @@ static inline void mat4x4_from_quat(mat4x4 M, quat const q) {
 static inline void mat4x4o_mul_quat(mat4x4 R, mat4x4 const M, quat const q) {
 	/*  XXX: The way this is written only works for othogonal matrices. */
 	/* TODO: Take care of non-orthogonal case. */
-	quat_mul_vec3(R[0], q, M[0]);
-	quat_mul_vec3(R[1], q, M[1]);
-	quat_mul_vec3(R[2], q, M[2]);
+	mat4x4 R_temp;
+	quat q_norm;
+	quat_norm(q_norm, q);
+	quat_mul_vec3(R_temp[0], q_norm, M[0]);
+	quat_mul_vec3(R_temp[1], q_norm, M[1]);
+	quat_mul_vec3(R_temp[2], q_norm, M[2]);
 
-	R[3][0] = R[3][1] = R[3][2] = 0.f;
-	R[3][3] = 1.f;
+	mat4x4_dup(R, R_temp);
+
+	uint8_t i;
+	for (i = 0; i < 4; ++i) {
+		R[3][i] = M[3][i];
+		R[i][3] = M[i][3];
+	}
 }
 static inline void quat_from_mat4x4(quat q, mat4x4 const M) {
 	float r = 0.f;
