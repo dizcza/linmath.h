@@ -10,10 +10,10 @@
 
 #include "linmath.h"
 
-#ifndef assert_param
-#define assert_param(expr) ((expr) ? (void)0U : assert_failed((uint8_t *)__FILE__, __LINE__))
-void assert_failed(uint8_t* file, uint32_t line);
-#endif /* assert_param */
+#ifndef assert_expr
+#define assert_expr(expr) ((expr) ? (void)0U : assert_expr_failed((uint8_t *)__FILE__, __LINE__))
+void assert_expr_failed(uint8_t* file, uint32_t line);
+#endif /* assert_expr */
 
 #define LINMATH_TEST_M(n) \
 static inline uint8_t vec##n##_equal(vec##n const a, vec##n const b) { \
@@ -42,7 +42,8 @@ static inline void Linmath_TestQuatMat4() {
 	mat4x4o_mul_quat(m_rotated, m_ident, q);
 	quat_rotate(q, degrees_to_rads(-degrees), axis);
 	mat4x4o_mul_quat(m, m_rotated, q);
-	assert_param(mat4x4_equal(m_ident, m));
+	uint8_t eq = mat4x4_equal(m_ident, m);
+	assert_expr(eq);
 }
 
 static inline void Linmath_TestQuatVec3() {
@@ -56,7 +57,8 @@ static inline void Linmath_TestQuatVec3() {
 	quat_mul_vec3(v, q, v);
 	quat_rotate(q, degrees_to_rads(-degrees), axis);
 	quat_mul_vec3(v, q, v);
-	assert_param(vec3_equal(v_ref, v));
+	uint8_t eq = vec3_equal(v_ref, v);
+	assert_expr(eq);
 }
 
 static inline void Linmath_RunTests() {
