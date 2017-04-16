@@ -36,11 +36,11 @@ static inline void Linmath_TestQuatMat4() {
 	quat q;
 	vec3 axis = { 0, 1, 0 };
 	float degrees = 15;
-	quat_rotate(q, degrees_to_rads(degrees), axis);
+	quat_rotate(q, LINMATH_DEGREES_TO_RADS(degrees), axis);
 	mat4x4 m_ident, m_rotated, m;
 	mat4x4_identity(m_ident);
 	mat4x4o_mul_quat(m_rotated, m_ident, q);
-	quat_rotate(q, degrees_to_rads(-degrees), axis);
+	quat_rotate(q, LINMATH_DEGREES_TO_RADS(-degrees), axis);
 	mat4x4o_mul_quat(m, m_rotated, q);
 	uint8_t eq = mat4x4_equal(m_ident, m);
 	assert_expr(eq);
@@ -50,12 +50,12 @@ static inline void Linmath_TestQuatVec3() {
 	quat q;
 	vec3 axis = { 1, 1, -1 };
 	float degrees = 139.27f;
-	quat_rotate(q, degrees_to_rads(degrees), axis);
+	quat_rotate(q, LINMATH_DEGREES_TO_RADS(degrees), axis);
 	const vec3 v_ref = { 23.12f, 0.89f, -6.23f };
 	vec3 v;
 	vec3_dup(v, v_ref);
 	quat_mul_vec3(v, q, v);
-	quat_rotate(q, degrees_to_rads(-degrees), axis);
+	quat_rotate(q, LINMATH_DEGREES_TO_RADS(-degrees), axis);
 	quat_mul_vec3(v, q, v);
 	uint8_t eq = vec3_equal(v_ref, v);
 	assert_expr(eq);

@@ -1,18 +1,26 @@
 #ifndef LINMATH_H
 #define LINMATH_H
 
-#include <math.h>
 #include "stdint.h"
 #include "float.h"
-#include "assert.h"
+#include "math.h"
 
-#define LINMATH_EPS ((float) 1e-4)
+//#define USE_CORDIC
 
-#define min(x,y) ((x) < (y) ? (x) : (y))
-#define max(x,y) ((x) > (y) ? (x) : (y))
-#define clamp(x,a,b) ((x) < (a) ? (a) : ((x) > (b) ? (b) : (x)))
-#define degrees_to_rads(degrees) (M_PI * (degrees) / 180.f)
-#define rads_to_degrees(rads) (180.f * (rads) / M_PI)
+#ifdef USE_CORDIC
+#define sinf_cosf cordic_sinf_cosf
+void cordic_sinf_cosf(float *sf, float *cf, float theta_rads);
+#else
+#define sinf_cosf math_sinf_cosf
+void math_sinf_cosf(float *sf, float *cf, float theta_rads);
+#endif /* USE_CORDIC */
+
+#define LINMATH_EPS                       ((float) 1e-4)
+#define LINMATH_MIN(x,y)                  ((x) < (y) ? (x) : (y))
+#define LINMATH_MAX(x,y)                  ((x) > (y) ? (x) : (y))
+#define LINMATH_CLAMP(x,a,b)              ((x) < (a) ? (a) : ((x) > (b) ? (b) : (x)))
+#define LINMATH_DEGREES_TO_RADS(degrees)  (M_PI * (degrees) / 180.f)
+#define LINMATH_RADS_TO_DEGREES(rads)     (180.f * (rads) / M_PI)
 
 
 #define LINMATH_H_DEFINE_VEC(n) \
@@ -354,8 +362,8 @@ static inline void mat4x4_from_vec3_mul_outer(mat4x4 M, vec3 const a,
 }
 static inline void mat4x4_rotate(mat4x4 R, mat4x4 const M, float x, float y,
 		float z, float angle) {
-	float s = sinf(angle);
-	float c = cosf(angle);
+	float s, c;
+	sinf_cosf(&s, &c, angle);
 	vec3 u = { x, y, z };
 
 	if (vec3_len(u) > 1e-4) {
@@ -387,8 +395,8 @@ static inline void mat4x4_rotate(mat4x4 R, mat4x4 const M, float x, float y,
 	}
 }
 static inline void mat4x4_rotate_X(mat4x4 Q, mat4x4 const M, float angle) {
-	float s = sinf(angle);
-	float c = cosf(angle);
+	float s, c;
+	sinf_cosf(&s, &c, angle);
 	mat4x4 R = {
 			{ 1.f, 0.f, 0.f, 0.f },
 			{ 0.f, c,   s,   0.f },
@@ -398,8 +406,8 @@ static inline void mat4x4_rotate_X(mat4x4 Q, mat4x4 const M, float angle) {
 	mat4x4_mul(Q, M, R);
 }
 static inline void mat4x4_rotate_Y(mat4x4 Q, mat4x4 const M, float angle) {
-	float s = sinf(angle);
-	float c = cosf(angle);
+	float s, c;
+	sinf_cosf(&s, &c, angle);
 	mat4x4 R = {
 			{ c,   0.f, s,   0.f },
 			{ 0.f, 1.f, 0.f, 0.f },
@@ -409,8 +417,8 @@ static inline void mat4x4_rotate_Y(mat4x4 Q, mat4x4 const M, float angle) {
 	mat4x4_mul(Q, M, R);
 }
 static inline void mat4x4_rotate_Z(mat4x4 Q, mat4x4 const M, float angle) {
-	float s = sinf(angle);
-	float c = cosf(angle);
+	float s, c;
+	sinf_cosf(&s, &c, angle);
 	mat4x4 R = {
 			{ c,   s,   0.f, 0.f },
 			{ -s,  c,   0.f, 0.f },
@@ -618,8 +626,10 @@ static inline void quat_conj(quat r, quat const q) {
 static inline void quat_rotate(quat r, float rads, vec3 const axis) {
 	vec3 axis_norm;
 	vec3_norm(axis_norm, axis);
-	vec3_scale(r, axis_norm, sinf(rads / 2));
-	r[3] = cosf(rads / 2);
+	float s, c;
+	sinf_cosf(&s, &c, (rads / 2));
+	vec3_scale(r, axis_norm, s);
+	r[3] = c;
 }
 
 static inline void quat_mul_vec3(vec3 r, quat const q, vec3 const v) {
@@ -649,7 +659,7 @@ static inline void quat_mul_vec3(vec3 r, quat const q, vec3 const v) {
 static inline void quat_slerp(quat res, quat const v0, quat const v1, float t) {
     // Only unit quaternions are valid rotations.
     // Normalize to avoid undefined behavior.
-	assert(t <= 1.f && t >= 0.f);
+	t = fmodf(t, 1.0f);
 	quat v0_norm, v1_norm;
 	quat_norm(v0_norm, v0);
 	quat_norm(v1_norm, v1);
@@ -676,7 +686,7 @@ static inline void quat_slerp(quat res, quat const v0, quat const v1, float t) {
         dot = -dot;
     }
 
-    dot = clamp(dot, -1.f, 1.f);              // Robustness: Stay within domain of acos()
+    dot = LINMATH_CLAMP(dot, -1.f, 1.f);              // Robustness: Stay within domain of acos()
     float theta_0 = acosf(dot);            // theta_0 = angle between input vectors
     float theta = theta_0*t;              // theta = angle between v0 and result
 
@@ -685,8 +695,10 @@ static inline void quat_slerp(quat res, quat const v0, quat const v1, float t) {
     quat_sub(v2_norm, v1_norm, v0_norm);  // Quaternion v2 = v1 – v0*dot;
     quat_norm_self(v2_norm);              // { v0, v2 } is now an orthonormal basis
 
-    quat_scale_self(v0_norm, cosf(theta));
-    quat_scale_self(v2_norm, sinf(theta));
+    float s, c;
+	sinf_cosf(&s, &c, theta);
+    quat_scale_self(v0_norm, c);
+    quat_scale_self(v2_norm, s);
     quat_add(res, v0_norm, v2_norm);      // v0*cos(theta) + v2_norm*sin(theta);
 }
 
