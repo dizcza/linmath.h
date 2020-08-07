@@ -489,14 +489,15 @@ LINMATH_H_FUNC void quat_conj(quat r, quat q)
 		r[i] = -q[i];
 	r[3] = q[3];
 }
-LINMATH_H_FUNC void quat_rotate(quat r, float angle, vec3 axis) {
-	vec3 v;
-	vec3_scale(v, axis, sinf(angle / 2));
-	int i;
-	for(i=0; i<3; ++i)
-		r[i] = v[i];
-	r[3] = cosf(angle / 2);
+LINMATH_H_FUNC void quat_rotate(quat r, float rads, vec3 const axis) {
+    vec3 axis_norm;
+    vec3_norm(axis_norm, axis);
+    float s = sinf(rads / 2);
+    float c = cosf(rads / 2);
+    vec3_scale(r, axis_norm, s);
+    r[3] = c;
 }
+
 #define quat_norm vec4_norm
 LINMATH_H_FUNC void quat_mul_vec3(vec3 r, quat q, vec3 v)
 {
