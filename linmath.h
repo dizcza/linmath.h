@@ -1,26 +1,10 @@
 #ifndef LINMATH_H
 #define LINMATH_H
 
-#include "stdint.h"
-#include "float.h"
-#include "math.h"
-
-//#define USE_CORDIC
-
-#ifdef USE_CORDIC
-#define sinf_cosf cordic_sinf_cosf
-void cordic_sinf_cosf(float *sf, float *cf, float theta_rads);
-#else
-#define sinf_cosf math_sinf_cosf
-void math_sinf_cosf(float *sf, float *cf, float theta_rads);
-#endif /* USE_CORDIC */
-
-#define LINMATH_EPS                       ((float) 1e-4)
-#define LINMATH_MIN(x,y)                  ((x) < (y) ? (x) : (y))
-#define LINMATH_MAX(x,y)                  ((x) > (y) ? (x) : (y))
-#define LINMATH_CLAMP(x,a,b)              ((x) < (a) ? (a) : ((x) > (b) ? (b) : (x)))
-#define LINMATH_DEGREES_TO_RADS(degrees)  (M_PI * (degrees) / 180.f)
-#define LINMATH_RADS_TO_DEGREES(rads)     (180.f * (rads) / M_PI)
+#include <stdint.h>
+#include <string.h>
+#include <float.h>
+#include <math.h>
 
 
 #ifdef LINMATH_NO_INLINE
@@ -77,45 +61,6 @@ LINMATH_H_FUNC void vec##n##_max(vec##n r, vec##n const a, vec##n const b) \
 	int i; \
 	for(i=0; i<n; ++i) \
 		r[i] = a[i]>b[i] ? a[i] : b[i]; \
-} \
-static inline void vec##n##_interpolate(vec##n * buffer, uint32_t cnt, vec##n const from, vec##n const to) \
-{ \
-	vec##n inc; \
-	vec##n##_sub(inc, to, from); \
-	vec##n##_scale_self(inc, 1.f / (cnt - 1)); \
-	vec##n##_dup(buffer[0], from); \
-	uint32_t i; \
-	for (i = 1; i < cnt; ++i) { \
-		vec##n##_add(buffer[i], buffer[i - 1], inc); \
-	} \
-} \
-static inline void vec##n##_pos_inf(vec##n v) { \
-	uint8_t i; \
-	for (i = 0; i < n; ++i) { \
-		v[i] = FLT_MAX; \
-	} \
-} \
-static inline void vec##n##_neg_inf(vec##n v) { \
-	uint8_t i; \
-	for (i = 0; i < n; ++i) { \
-		v[i] = -FLT_MAX; \
-	} \
-} \
-static inline uint8_t vec##n##_all_pos(vec##n v) { \
-	uint8_t i; \
-	uint8_t res = 1; \
-	for (i = 0; i < n; ++i) { \
-		res &= v[i] >= 0; \
-	} \
-	return res; \
-} \
-static inline uint8_t vec##n##_all_neg(vec##n v) { \
-	uint8_t i; \
-	uint8_t res = 1; \
-	for (i = 0; i < n; ++i) { \
-		res &= v[i] <= 0; \
-	} \
-	return res; \
 }
 
 LINMATH_H_DEFINE_VEC(2)
@@ -149,7 +94,7 @@ LINMATH_H_FUNC void vec4_reflect(vec4 r, vec4 v, vec4 n)
 {
 	float p  = 2.f*vec4_mul_inner(v, n);
 	int i;
-	for (i = 0; i < 3; ++i)
+	for (i = 0; i < 4; ++i)
 		r[i] = v[i] - p * n[i];
 }
 
@@ -166,7 +111,7 @@ LINMATH_H_FUNC void mat4x4_dup(mat4x4 M, mat4x4 N)
 	int i, j;
 	for (i = 0; i < 4; ++i)
 		for (j = 0; j < 4; ++j)
-			M[i][j] = i == j ? 1.f : 0.f;
+			M[i][j] = N[i][j];
 }
 LINMATH_H_FUNC void mat4x4_row(vec4 r, mat4x4 M, int i)
 {
@@ -182,11 +127,12 @@ LINMATH_H_FUNC void mat4x4_col(vec4 r, mat4x4 M, int i)
 }
 LINMATH_H_FUNC void mat4x4_transpose(mat4x4 M, mat4x4 N)
 {
+    // Note: if M and N are the same, the user has to
+    // explicitly make a copy of M and set it to N.
 	int i, j;
 	for (j = 0; j < 4; ++j)
 		for (i = 0; i < 4; ++i)
-			M_temp[i][j] = N[j][i];
-	mat4x4_dup(M, M_temp);
+			M[i][j] = N[j][i];
 }
 LINMATH_H_FUNC void mat4x4_add(mat4x4 M, mat4x4 a, mat4x4 b)
 {
@@ -564,13 +510,13 @@ v' = v + q.w * t + cross(q.xyz, t)
 	vec3 u = { q[0], q[1], q[2] };
 
 	vec3_mul_cross(t, q_xyz, v);
-	vec3_scale_self(t, 2);
+	vec3_scale(t, t, 2);
 
 	vec3_mul_cross(u, q_xyz, t);
-	vec3_scale_self(t, q[3]);
+	vec3_scale(t, t, q[3]);
 
 	vec3_add(r, v, t);
-	vec3_add_self(r, u);
+	vec3_add(r, r, u);
 }
 LINMATH_H_FUNC void mat4x4_from_quat(mat4x4 M, quat q)
 {
@@ -604,7 +550,7 @@ LINMATH_H_FUNC void mat4x4_from_quat(mat4x4 M, quat q)
 
 LINMATH_H_FUNC void mat4x4o_mul_quat(mat4x4 R, mat4x4 M, quat q)
 {
-/*  XXX: The way this is written only works for othogonal matrices. */
+/*  XXX: The way this is written only works for orthogonal matrices. */
 /* TODO: Take care of non-orthogonal case. */
 	quat_mul_vec3(R[0], q, M[0]);
 	quat_mul_vec3(R[1], q, M[1]);
